@@ -1,0 +1,93 @@
+name: terraform-ci
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+env:
+  TF_VERSION: 1.8.5
+  JOSH_ID: "Josh-8811"
+  ADNAN_ID: "Adnan-5678"
+
+jobs:
+  warmup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create hello artifacts
+        run: |
+          echo "Hello from GitHub Actions - Josh" > hello-${{ env.JOSH_ID }}.txt
+          echo "Hello from GitHub Actions - Adnan" > hello-${{ env.ADNAN_ID }}.txt
+          echo "SHA: ${{ github.sha }}" >> hello-${{ env.JOSH_ID }}.txt
+          echo "Event: ${{ github.event_name }}" >> hello-${{ env.ADNAN_ID }}.txt
+          
+      - name: Upload hello artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hello-artifacts
+          path: |
+            hello-${{ env.JOSH_ID }}.txt
+            hello-${{ env.ADNAN_ID }}.txt
+
+  fmt-validate-plan:
+    runs-on: ubuntu-latest
+    needs: warmup
+    permissions:
+      contents: read
+      id-token: write
+      
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform FMT
+        working-directory: ./terraform  
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: ./terraform  
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: ./terraform  
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        working-directory: ./terraform  
+        run: terraform plan -no-color -out=tfplan.bin
+
+      - name: Terraform Show → plan.txt
+        working-directory: ./terraform  
+        run: terraform show -no-color tfplan.bin | tee plan.txt
+
+      - name: Extract plan summary
+        id: extract
+        working-directory: ./terraform  
+        run: |
+          SUMMARY=$(tail -n 20 plan.txt)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tf-plan-combined
+          path: terraform/plan.txt 
+
+      - name: Comment plan summary on PR
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            **Terraform Plan Summary** — Collaboration by Josh & Adnan
+            ```terraform
+            ${{ steps.extract.outputs.summary }}
+            ```
