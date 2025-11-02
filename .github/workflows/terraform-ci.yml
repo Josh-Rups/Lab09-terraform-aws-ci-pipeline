@@ -9,6 +9,7 @@ env:
   TF_VERSION: "1.8.5"
   JOSH_ID: "Josh-8811"
   ADNAN_ID: "Adnan-5678"
+  AWS_REGION: "us-east-1"
 
 jobs:
   warmup:
@@ -47,7 +48,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
